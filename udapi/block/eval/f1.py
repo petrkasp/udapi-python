@@ -156,12 +156,25 @@ class F1(BaseWriter):
                 self._pred[x] += 1
                 self._total[x] += 1
 
+    @staticmethod
+    def calculate_f1_precision_recall(correct, pred, gold):
+        precision = correct / (pred or 1) # `or 1` prevents division by zero
+        recall = correct / (gold or 1)
+        f1 = 2 * precision * recall / ((precision + recall) or 1)
+        return f1, precision, recall
+    
+    def stats_for_most_common_tokens(self, number_of_tokens):
+        tokens = self._total.most_common(number_of_tokens)
+        
+        results = {}
+        for token, _ in tokens:
+            results[token] = self.calculate_f1_precision_recall(self._common[token], self._pred[token], self._gold[token])
+
+        return results
+    
     @property
-    def f1(self):
-        pred, gold = self.pred or 1, self.gold or 1  # prevent division by zero
-        precision = self.correct / pred
-        recall = self.correct / gold
-        return 2 * precision * recall / ((precision + recall) or 1)
+    def f1_precision_recall(self):
+        return self.calculate_f1_precision_recall(self.correct, self.pred, self.gold)
 
     def process_end(self):
         # Redirect the default filehandle to the file specified by self.files
@@ -181,11 +194,7 @@ class F1(BaseWriter):
             print('=== Details ===')
             print('%-10s %5s %5s %5s %6s  %6s  %6s'
                   % ('token', 'pred', 'gold', 'corr', 'prec', 'rec', 'F1'))
-            tokens = self._total.most_common(self.details)
-            for token, _ in tokens:
-                _prec = self._common[token] / (self._pred[token] or 1)
-                _rec = self._common[token] / (self._gold[token] or 1)
-                _f1 = 2 * _prec * _rec / ((_prec + _rec) or 1)
+            for token, (_f1, _prec, _rec) in self.stats_for_most_common_tokens(self.details).items():
                 print('%-10s %5d %5d %5d %6.2f%% %6.2f%% %6.2f%%'
                       % (token, self._pred[token], self._gold[token], self._common[token],
                          100 * _prec, 100 * _rec, 100 * _f1))
@@ -193,10 +202,8 @@ class F1(BaseWriter):
 
         print("%-9s = %7d\n" * 3
               % ('predicted', self.pred, 'gold', self.gold, 'correct', self.correct), end='')
-        pred, gold = self.pred or 1, self.gold or 1  # prevent division by zero
-        precision = self.correct / pred
-        recall = self.correct / gold
-        f1 = 2 * precision * recall / ((precision + recall) or 1)
+
+        f1, precision, recall = self.f1_precision_recall
         print("%-9s = %6.2f%%\n" * 3
               % ('precision', 100 * precision, 'recall', 100 * recall, 'F1', 100 * f1), end='')
 
